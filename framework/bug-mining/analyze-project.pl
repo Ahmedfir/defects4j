@@ -26,7 +26,7 @@
 
 =head1 NAME
 
-analyze-project.pl -- Determine all suitable candidates listed in the commit-db.
+analyze-project.pl -- Determine all suitable candidates listed in the active-bugs csv.
 
 =head1 SYNOPSIS
 
@@ -57,13 +57,13 @@ commons-lang project is LANG.
 =item B<-b C<bug_id>>
 
 Only analyze this bug id. The bug_id has to follow the format B<(\d+)(:(\d+))?>.
-Per default all bug ids, listed in the commit-db, are considered.
+Per default all bug ids, listed in the active-bugs csv, are considered.
 
 =back
 
 =head1 DESCRIPTION
 
-Runs the following worflow for all candidate bugs in the project's C<commit-db>,
+Runs the following worflow for all candidate bugs in the project's C<active-bugs.csv>,
 or (if -b is specified) for a subset of candidates:
 
 =over 4
@@ -160,7 +160,7 @@ my $dbh = DB::get_db_handle($TAB_REV_PAIRS, $db_dir);
 my @COLS = DB::get_tab_columns($TAB_REV_PAIRS) or die;
 
 # Figure out which IDs to run script for
-my @ids = $project->get_version_ids();
+my @ids = $project->get_bug_ids();
 if (defined $BID) {
     if ($BID =~ /(\d+):(\d+)/) {
         @ids = grep { ($1 <= $_) && ($_ <= $2) } @ids;
@@ -263,7 +263,25 @@ sub _check_t2v2 {
 
         # Run t2 and get number of failing tests
         my $file = "$project->{prog_root}/v2.fail"; `>$file`;
+
         $project->run_tests($file) or die;
+
+        # Filter out invalid test names, such as testEncode[0].
+        # This problem impacts many Commons projects.
+        if(-e "$project->{prog_root}/v2.fail"){
+            rename("$project->{prog_root}/v2.fail", "$project->{prog_root}/v2.fail".'.bak');
+            open(IN, '<'."$project->{prog_root}/v2.fail".'.bak') or die $!;
+            open(OUT, '>'."$project->{prog_root}/v2.fail") or die $!;
+            while(<IN>) {
+                if($_ =~ /\-\-\-/){
+                    $_ =~ s/\[[0-9]\]//g;
+                }
+                print OUT $_;
+            }
+            close(IN);
+            close(OUT);
+        }
+	
         # Get number of failing tests
         my $list = Utils::get_failing_tests($file);
         my $fail = scalar(@{$list->{"classes"}}) + scalar(@{$list->{"methods"}});

@@ -85,6 +85,7 @@ jobs:
     - script: carton exec ./test_verify_bugs.sh -p Mockito -b27..38
 ## Time
     - script: carton exec ./test_verify_bugs.sh -p Time
+      name: "Time"
     # Test fault localization analysis
     - stage: fault-localization
       script: travis_wait 30 carton exec ./test_fault_localization.sh -p Chart -b1..5

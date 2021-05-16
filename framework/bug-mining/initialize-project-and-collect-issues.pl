@@ -72,8 +72,8 @@ organization the repo is under, e.g., apache.
 
 =item B<-q C<query>>
 
-The query sent to the issue tracker. Suitable defaults for supported trackers
-are chosen so they identify only bugs.
+The query (i.e., filter for bug type or label) sent to the issue tracker.
+Suitable defaults for supported trackers are chosen so they identify only bugs.
 
 =item B<-u C<tracker-uri>>
 
@@ -125,14 +125,14 @@ my $ISSUE_TRACKER_PROJECT_ID = $cmd_opts{t};
 my $ISSUES_DIR = "$WORK_DIR/issues";
 my $ISSUES_FILE = "$WORK_DIR/issues.txt";
 my $ORGANIZATION_ID = $cmd_opts{z};
-my $QUERY = $cmd_opts{q} // "labels=Bug";
+my $QUERY = $cmd_opts{q};
 my $TRACKER_URI = $cmd_opts{u};
 my $FETCHING_LIMIT = $cmd_opts{l};
 
 my $REGEXP = $cmd_opts{e};
 my $GIT_LOG_FILE = "$WORK_DIR/gitlog";
 my $REPOSITORY_DIR = "$WORK_DIR/project_repos/$NAME.git";
-my $COMMIT_DB_FILE = "$WORK_DIR/framework/projects/$PID/commit-db";
+my $COMMIT_DB_FILE = "$WORK_DIR/framework/projects/$PID/$BUGS_CSV_ACTIVE";
 my $VCS_TYPE = $cmd_opts{v} // "git";
 
 # Configure project for Defects4J
@@ -151,12 +151,17 @@ if (-e "$CORE_DIR/Project/$PID.pm") {
     system("cp $PROJECTS_DIR/$PID/$PID.build.xml $WORK_DIR/framework/projects/$PID/$PID.build.xml");
 }
 
+if (defined($QUERY)) {
+    $QUERY = "-q $QUERY";
+} else {
+    $QUERY = "";
+}
 # Collect all issues from the project issue tracker
 Utils::exec_cmd("./download-issues.pl -g $ISSUE_TRACKER_NAME"
                                   . " -t $ISSUE_TRACKER_PROJECT_ID"
                                   . " -o $ISSUES_DIR"
                                   . " -f $ISSUES_FILE"
-                                  . " -q $QUERY",
+                                  . "$QUERY",
                 "Collecting all issues from the project issue tracker") or die "Cannot collect all issues from the project issue tracker!";
 
 # Collect git log
@@ -174,9 +179,12 @@ Utils::exec_cmd("./vcs-log-xref.pl -e '$REGEXP'"
 # have already been mined.
 if (-e "$CORE_DIR/Project/$PID.pm") {
     # Remove exiting ids
-    system("cut -f 2- -d',' $PROJECTS_DIR/$PID/commit-db > $COMMIT_DB_FILE.orig");
+    system("tail -n +2 $PROJECTS_DIR/$PID/$BUGS_CSV_ACTIVE | cut -f 2- -d',' > $COMMIT_DB_FILE.orig");
     # Find all versions that have not been mined
     system("grep -vFf $COMMIT_DB_FILE.orig $COMMIT_DB_FILE > $COMMIT_DB_FILE.filter && mv $COMMIT_DB_FILE.filter $COMMIT_DB_FILE");
+    # Print header to the active bugs csv
+    my $active_header = $BUGS_CSV_BUGID.",".$BUGS_CSV_COMMIT_BUGGY.",".$BUGS_CSV_COMMIT_FIXED.",".$BUGS_CSV_ISSUE_ID.",".$BUGS_CSV_ISSUE_URL;
+    system("echo $active_header > $COMMIT_DB_FILE.new && cat $COMMIT_DB_FILE >> $COMMIT_DB_FILE.new && mv $COMMIT_DB_FILE.new $COMMIT_DB_FILE");
 }
 
 print("Project $PID has been successfully initialized!\n");
